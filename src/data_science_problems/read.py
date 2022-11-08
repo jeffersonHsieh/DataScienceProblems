@@ -12,7 +12,6 @@ from shutil import copyfile
 ROOT = Path(os.path.abspath(__file__)).parent.parent
 DSP = ROOT / "data-science-notebooks.txt"
 
-
 def extract_initial_comments(tgt):
     tgt = tgt.strip().split("\n")
     for idx, t in enumerate(tgt):
@@ -71,7 +70,9 @@ def build_examples(path, context_len=3):
 
 
 def build_examples_new(path, context_len=3):
-    path = ROOT.parent / Path(path.strip())
+    # print('root:',ROOT)
+    # path = ROOT.parent / Path(path.strip())
+    path=Path(path.strip())
     # try:
     nb = nbformat.read(path, as_version=4)
     # except:

@@ -14,8 +14,8 @@ from data_science_problems.utils import stream_jsonl, estimate_pass_at_k, reliab
 from data_science_problems.progress import ProgressBar
 
 
-import ray
-ray.init(log_to_driver=False)
+# import ray
+# ray.init(log_to_driver=False)
 
 
 def refersh_and_save(path, fout, completions, problems):
@@ -48,9 +48,9 @@ def refersh_and_save(path, fout, completions, problems):
                 cells_json[idx]["source"] = problems[task_id]["solution"]
 
 
-@ray.remote
-def execute(notebook_filename, actor, ferr):
-    actor.update.remote(1)
+# @ray.remote
+def execute(notebook_filename, ferr, actor=None):
+    # actor.update.remote(1)
     notebook_filename = Path(notebook_filename.strip())
     nb = nbformat.read(notebook_filename, as_version=4)
     parent = notebook_filename.parent
@@ -68,8 +68,10 @@ def execute(notebook_filename, actor, ferr):
     nbformat.write(enb, notebook_filename)
     print(notebook_filename)
 
-
+# weird => if empty input, no error
 def has_no_error(x):
+    if len(x) == 0:
+      return False
     for element in x:
         if "ename" in element:
             return False
@@ -87,9 +89,11 @@ def evaluate(path):
             task_id = cells_json[idx]["metadata"]["task_id"]
             source = cells_json[idx]["source"]
             if "#### GENERATED" in source:
-#                 print(task_id)
                 test = cells_json[idx+1]["outputs"]
-                return has_no_error(test), task_id
+                res = has_no_error(test)
+                # if res:
+                #   print(task_id)
+                return res, task_id
 
 
 def evaluate_dsp(sample_file="samples.jsonl", ks=[1, 10, 100]):
@@ -105,11 +109,13 @@ def evaluate_dsp(sample_file="samples.jsonl", ks=[1, 10, 100]):
     print("Saving to new notebooks with generated samples.")
     ps = read_filepaths()
     out_file = "generated.txt"
+
+
     with open(out_file, "w") as fout:
         for path in tqdm(ps, total=len(ps)):
             refersh_and_save(path, fout, completions, problems)
 
-
+ 
     # disable functionalities that can make destructive changes to the test
     reliability_guard()
 
@@ -118,11 +124,15 @@ def evaluate_dsp(sample_file="samples.jsonl", ks=[1, 10, 100]):
     with open(out_file) as f:
         ps = f.readlines()
     
-    pb = ProgressBar(len(ps))
+    # import pdb;pdb.set_trace()
+    # pb = ProgressBar(len(ps))
     with open("errors.txt", "w") as ferr:
-        tasks_pre_launch = [execute.remote(notebook_filename, pb.actor, ferr) for notebook_filename in ps]
-        pb.print_until_done()
-        tasks = ray.get(tasks_pre_launch)
+        tasks_pre_launch = [execute(notebook_filename, ferr) for notebook_filename in ps]
+
+        # tasks_pre_launch = [execute.remote(notebook_filename, pb.actor, ferr) for notebook_filename in ps]
+        # pb.print_until_done()
+        # tasks = ray.get(tasks_pre_launch)
+        tasks = tasks_pre_launch
 
 
     # calculate pass@k.
@@ -131,18 +141,27 @@ def evaluate_dsp(sample_file="samples.jsonl", ks=[1, 10, 100]):
         ps = f.readlines()
     
     results = defaultdict(list)
+    # import pdb;pdb.set_trace()
+
     for notebook_filename in tqdm(ps):
         result, task_id = evaluate(notebook_filename)
         results[task_id].append(result)
     
     total, correct = [], []
-    for result in results.values():
+    err_ids = []
+    for task_id,result in results.items():
         result.sort()
         passed = [bool(r) for r in result]
+        if not bool(result[0]):
+            err_ids.append(task_id)
         total.append(len(passed))
         correct.append(sum(passed))
     total = np.array(total)
     correct = np.array(correct)
+    
+    with open('pat1_error_ids.txt', 'w') as f:
+        for item in err_ids:
+            f.write("%s\n" % item)
 
     pass_at_k = {f"pass@{k}": estimate_pass_at_k(total, correct, k).mean() \
                                                 for k in ks if (total >= k).all()}
