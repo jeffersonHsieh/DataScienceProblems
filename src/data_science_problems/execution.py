@@ -70,8 +70,8 @@ def execute(notebook_filename, ferr, actor=None):
 
 # weird => if empty input, no error
 def has_no_error(x):
-    if len(x) == 0:
-      return False
+    # if len(x) == 0:
+    #   return False
     for element in x:
         if "ename" in element:
             return False
